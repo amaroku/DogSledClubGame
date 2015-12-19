@@ -5,6 +5,13 @@ var game = new Phaser.Game(1100, 400, Phaser.CANVAS, 'game', null, false, false)
 
 var PhaserGame = function () {
 
+    this.cameraWidth = 1100/2;
+    this.cameraHeight = 400/2;
+    this.uiView = {
+        x: 0,
+        y: 0
+    };
+
     this.graphicScale = 2;
     this.player = null;
     this.platforms = null;
@@ -12,11 +19,17 @@ var PhaserGame = function () {
     this.jumpTimer = 0;
     this.cursors = null;
 
-    this.maxPlayerVelocity = 100;
+    this.drag = 50;
+
+    this.maxPlayerVelocity = 1000;
     this.playerVelocity = 0;
-    this.playerAccel = 400;
+    this.playerAccel = 0;
+    this.maxPlayerAccel = 1000;
     this.distanceTraveled = 0;
-    this.totalDistance = 1000000;
+    this.totalDistance = 100000;
+    this.worldStartMargin = 500;
+    this.worldEndMargin = 1000;
+    this.actualDistance = this.totalDistance+this.worldStartMargin+this.worldEndMargin;
 
     this.bgLayer1Width = 1235;
     this.bgLayer2Width = 900;
@@ -45,27 +58,26 @@ PhaserGame.prototype = {
 
     create: function () {
         this.add.sprite(0, 0, 'background').scale.setTo(this.graphicScale,this.graphicScale);
-        this.bgLayer2 = this.add.sprite(0, 0, 'bgLayer2').scale.setTo(this.graphicScale,this.graphicScale);
-        this.bgLayer1 = this.add.sprite(0, 140, 'bgLayer1').scale.setTo(this.graphicScale,this.graphicScale);
+        this.bgLayer2 = this.add.sprite(0, 0, 'bgLayer2');
+        this.bgLayer2.scale.setTo(this.graphicScale,this.graphicScale);
+        this.bgLayer1 = this.add.sprite(0, 140, 'bgLayer1');
+        this.bgLayer1.scale.setTo(this.graphicScale,this.graphicScale);
+        this.world.setBounds(0,0,this.actualDistance,400);
 
-/*        this.platforms = this.add.physicsGroup();
-
-        this.platforms.create(0, 64, 'ice-platform');
-        this.platforms.create(200, 180, 'platform');
-        this.platforms.create(400, 296, 'ice-platform');
-        this.platforms.create(600, 412, 'platform');
-
-        this.platforms.setAll('body.allowGravity', false);
-        this.platforms.setAll('body.immovable', true);
-        this.platforms.setAll('body.velocity.x', 100);*/
-
-        this.baseFloor = this.add.sprite(0, 368, 'base');
+        //this.baseFloor = this.add.sprite(0, 368, 'base');
+        this.baseFloor = this.add.tileSprite(0, 368, this.actualDistance, 32 , 'base');
         //this.baseFloor.scale.setTo(this.graphicScale,this.graphicScale);
 
-        this.player = this.add.sprite(320, 432, 'dude');
+        // player setup
+        this.player = this.add.sprite(this.worldStartMargin, 432, 'dude');
         this.player.scale.setTo(this.graphicScale,this.graphicScale);
 
+        // body physics won't work without this!!
         this.physics.arcade.enable(this.player);
+
+        this.player.body.drag.x = this.drag;
+        //this.player.body.friction.x = 50;
+        this.player.body.maxVelocity.x = this.maxPlayerVelocity;
 
         this.player.body.collideWorldBounds = true;
         this.player.body.setSize(40, 64, 0, 0);
@@ -79,10 +91,9 @@ PhaserGame.prototype = {
 
         if(this.debugMode){
             this.accelerationText = game.add.text(8, 8, 'n/a', {fontSize: '14px', fill: '#FFF' });
-            this.velocityText = game.add.text(50, 8, 'n/a', {fontSize: '14px', fill: '#FFF' });
-            this.distanceText = game.add.text(100, 8, 'n/a', {fontSize: '14px', fill: '#FFF' });
+            this.velocityText = game.add.text(58, 8, 'n/a', {fontSize: '14px', fill: '#FFF' });
+            this.distanceText = game.add.text(108, 8, 'n/a', {fontSize: '14px', fill: '#FFF' });
         }
-
     },
 
     wrapPlatform: function (platform) {
@@ -102,10 +113,16 @@ PhaserGame.prototype = {
 
     update: function () {
 
+        this.uiView.x = this.game.camera.x;// - this.cameraWidth;
+        this.uiView.y = this.game.camera.y;// - this.cameraHeight;
+
         if(this.debugMode){
-            this.velocityText.text = this.playerVelocity;
-            this.accelerationText.text = this.playerAccel;
-            this.distanceText.text = this.distanceTraveled;
+            this.accelerationText.x = this.uiView.x + 8;
+            this.accelerationText.text = Math.round(this.player.body.acceleration.x);
+            this.velocityText.x = this.uiView.x + 58;
+            this.velocityText.text = Math.round(this.player.body.velocity.x);
+            this.distanceText.x = this.uiView.x + 108;
+            this.distanceText.text = Math.round(this.player.body.position.x);
         }
 
         //this.platforms.forEach(this.wrapPlatform, this);
@@ -116,22 +133,37 @@ PhaserGame.prototype = {
         //  Do this AFTER the collide check, or we won't have blocked/touching set
         var standing = this.player.body.blocked.down || this.player.body.touching.down;
 
-        this.player.body.velocity.x = 0;
-        this.player.body.position.x = 100+(this.playerVelocity/this.maxPlayerVelocity)*300;
+        //this.player.body.velocity.x = 0;
+        //this.player.body.position.x = 100+(this.playerVelocity/this.maxPlayerVelocity)*300;
+
+        //TODO:: make these static
+        //this.bgLayer1.position.x = -1 * this.bgLayer1Width * (this.distanceTraveled/this.totalDistance);
+        //this.bgLayer2.position.x = -1 * this.bgLayer2Width * (this.distanceTraveled/this.totalDistance);
 
         if (this.cursors.left.isDown) {
-            if(this.playerVelocity > 0){
-                this.playerVelocity -= 1;
+            // nothing.
+            if(this.player.body.acceleration.x > -1 * this.maxPlayerAccel){
+                this.player.body.acceleration.x -= 50;
             }
         } else if (this.cursors.right.isDown) {
-            if(this.playerVelocity < this.maxPlayerVelocity){
-                this.playerVelocity += 1;
-            }
+            // nothing.
+            this.player.body.acceleration.x = 6000;
+        } else {
+            this.player.body.acceleration.x = 0;
         }
 
-        if(this.distanceTraveled < this.totalDistance){
+        /*if (this.player.body.velocity.x > 0){
+            this.player.body.velocity.x -= 5;
+        } else if (this.player.body.velocity.x < this.maxPlayerVelocity){
+            this.player.body.velocity.x += 5;
+        }*/
+
+        // camera should follow player and offset depending on the distance traveled.
+        this.game.camera.x = this.player.body.x - this.cameraWidth + (400 - (this.player.body.velocity.x/this.maxPlayerVelocity)*300);
+
+        /*if(this.distanceTraveled < this.totalDistance){
             this.distanceTraveled += this.playerVelocity;
-        }
+        }*/
 
         if (standing && this.cursors.up.isDown && this.time.time > this.jumpTimer) {
             this.player.body.velocity.y = -500;
